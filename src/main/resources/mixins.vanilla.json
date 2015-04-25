@@ -8,6 +8,8 @@
         "MixinBootstrap",
         "block.tile.MixinTileEntity",
         "entity.MixinEntity",
+        "entity.player.MixinEntityPlayer",
+        "entity.player.MixinEntityPlayerMP",
         "entity.vehicle.MixinEntityMinecart",
         "item.MixinEnchantment",
         "management.MixinItemInWorldManager",
