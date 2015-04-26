@@ -36,16 +36,23 @@ import net.minecraft.scoreboard.Team;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.stats.StatList;
 import net.minecraft.util.DamageSource;
+import net.minecraft.util.IChatComponent;
+import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 import org.spongepowered.api.entity.player.Player;
 import org.spongepowered.api.event.SpongeEventFactory;
 import org.spongepowered.api.event.entity.player.PlayerDeathEvent;
+import org.spongepowered.api.event.entity.player.PlayerRespawnEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.common.Sponge;
-import org.spongepowered.common.text.SpongeChatComponent;
-import org.spongepowered.common.text.SpongeText;
+import org.spongepowered.common.text.SpongeTexts;
 import org.spongepowered.vanilla.interfaces.IMixinEntityPlayerMP;
 
 import java.util.Collection;
@@ -64,14 +71,14 @@ public abstract class MixinEntityPlayerMP extends EntityPlayer implements IMixin
         super(worldIn, gameProfileIn);
     }
 
-    @Overwrite
-    public void onDeath(DamageSource cause) {
+    @Inject(method = "onDeath", at = @At("HEAD"))
+    public void onDeathHead(DamageSource cause, CallbackInfo ci) {
         boolean keepInventory = this.worldObj.getGameRules().getGameRuleBooleanValue("keepInventory");
         lastEvent = SpongeEventFactory.createPlayerDeath(Sponge.getGame(),
                 null,
                 (Player) this,
                 ((Player) this).getLocation(),
-                ((SpongeChatComponent) this.getCombatTracker().getDeathMessage()).toText(),
+                SpongeTexts.toText(this.getCombatTracker().getDeathMessage()),
                 keepInventory ? 0 : getExperiencePoints(this),
                 (int) (keepInventory ? experience : 0),
                 keepInventory ? experienceLevel : 0,
@@ -88,47 +95,33 @@ public abstract class MixinEntityPlayerMP extends EntityPlayer implements IMixin
         } else {
             lastEvent.setKeepsLevel(true);
         }
+    }
 
-        if(this.worldObj.getGameRules().getGameRuleBooleanValue("showDeathMessages")) {
-            Team collection = this.getTeam();
-            if(collection != null && collection.func_178771_j() != Team.EnumVisible.ALWAYS) {
-                if(collection.func_178771_j() == Team.EnumVisible.HIDE_FOR_OTHER_TEAMS) {
-                    this.mcServer.getConfigurationManager().sendMessageToAllTeamMembers((EntityPlayerMP) (Object) this, ((SpongeText) lastEvent.getDeathMessage()).toComponent(getLocale()));
-                } else if(collection.func_178771_j() == Team.EnumVisible.HIDE_FOR_OWN_TEAM) {
-                    this.mcServer.getConfigurationManager().sendMessageToTeamOrEvryPlayer((EntityPlayerMP) (Object) this, ((SpongeText) lastEvent.getDeathMessage()).toComponent(getLocale()));
-                }
-            } else {
-                this.mcServer.getConfigurationManager().sendChatMsg(((SpongeText) lastEvent.getDeathMessage()).toComponent(getLocale()));
-            }
-        }
+    @ModifyArg(method = "onDeath", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendMessageToAllTeamMembers" +
+            "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/IChatComponent;)V"))
+    public IChatComponent onDeathMessageFirstSend(EntityPlayer player, IChatComponent component) {
+        return SpongeTexts.toComponent(lastEvent.getDeathMessage());
+    }
 
-        if(!lastEvent.keepsInventory()) {
-            this.inventory.dropAllItems();
-        }
+    @ModifyArg(method = "onDeath", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendMessageToTeamOrEvryPlayer" +
+            "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/IChatComponent;)V"))
+    public IChatComponent onDeathMessageSecondSend(EntityPlayer player, IChatComponent component) {
+        return SpongeTexts.toComponent(lastEvent.getDeathMessage());
+    }
 
-        Collection collection1 = this.worldObj.getScoreboard().getObjectivesFromCriteria(IScoreObjectiveCriteria.deathCount);
-        Iterator iterator = collection1.iterator();
+    @ModifyArg(method = "onDeath", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendChatMsg" +
+            "(Lnet/minecraft/util/IChatComponent;)V"))
+    public IChatComponent onDeathMessageThirdSend(IChatComponent component) {
+        return SpongeTexts.toComponent(lastEvent.getDeathMessage());
+    }
 
-        while(iterator.hasNext()) {
-            ScoreObjective entitylivingbase = (ScoreObjective)iterator.next();
-            Score entityegginfo = this.getWorldScoreboard().getValueFromObjective(this.getCommandSenderName(), entitylivingbase);
-            entityegginfo.func_96648_a();
-        }
+    @Redirect(method = "onDeath", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/GameRules;getGameRuleBooleanValue(Ljava/lang/String;)Z"))
+    public boolean keepInventoryCheckRedirect(GameRules gameRules, String gameRule) {
+        return lastEvent.keepsInventory();
+    }
 
-        EntityLivingBase entitylivingbase1 = this.func_94060_bK();
-        if(entitylivingbase1 != null) {
-            EntityList.EntityEggInfo entityegginfo1 = (EntityList.EntityEggInfo)EntityList.entityEggs.get(Integer.valueOf(EntityList.getEntityID(entitylivingbase1)));
-            if(entityegginfo1 != null) {
-                this.triggerAchievement(entityegginfo1.field_151513_e);
-            }
-
-            entitylivingbase1.addToPlayerScore(this, this.scoreValue);
-        }
-
-        this.triggerAchievement(StatList.deathsStat);
-        this.func_175145_a(StatList.timeSinceDeathStat);
-        this.getCombatTracker().func_94549_h();
-
+    @Inject(method = "onDeath", at = @At(value = "RETURN"))
+    public void onDeathReturn(DamageSource cause, CallbackInfo ci) {
         experience = 0;
         experienceTotal = 0;
         experienceLevel = 0;

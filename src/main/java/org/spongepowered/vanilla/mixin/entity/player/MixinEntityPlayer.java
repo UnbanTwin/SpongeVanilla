@@ -79,7 +79,6 @@ public abstract class MixinEntityPlayer extends EntityLivingBase {
     // The check above encompasses both keepsInventory and keepsLevel -- if keepsInventory is on but keepsLevel is off (or opposite), copy it manually
     @Inject(method = "clonePlayer", at = @At(value = "RETURN"))
     public void clonePlayerReturnHandler(EntityPlayer old, boolean respawnFromEnd, CallbackInfo ci) {
-        System.out.println(((IMixinEntityPlayerMP) this).getLastDeathEvent());
         if (!respawnFromEnd && ((IMixinEntityPlayerMP) this).getLastDeathEvent() != null) {
             // TODO: handle score copying here (api methods for setting that perhaps?) http://i.imgur.com/mV5rTQd.png
             //this.setScore(old.getScore());
@@ -92,8 +91,6 @@ public abstract class MixinEntityPlayer extends EntityLivingBase {
                 this.experienceTotal = old.experienceTotal;
                 this.experience = old.experience;
             }
-
-
         }
     }
 }
